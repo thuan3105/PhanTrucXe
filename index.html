@@ -102,13 +102,37 @@
         pointer-events: none;
     }
 
+/* Sửa lại vùng chứa nút điều khiển */
+.controls {
+    text-align: center;
+    margin: 20px 0;
+    padding: 15px;
+    background: #fff3e0;
+    border-radius: 8px;
+    
+    /* Thêm các dòng dưới đây */
+    display: flex;
+    gap: 10px;          /* Khoảng cách giữa 2 nút */
+    justify-content: center;
+}
+
+.controls button {
+    flex: 1;            /* Ép 2 nút có chiều dài bằng nhau */
+    margin: 0 !important; /* Xóa các margin lẻ gây lệch */
+    padding: 12px 10px;
+    white-space: nowrap; /* Giữ chữ trên 1 dòng */
+}
+
+/* Tùy chỉnh cho điện thoại rất nhỏ */
+@media (max-width: 480px) {
     .controls {
-        text-align: center;
-        margin: 20px 0;
-        padding: 15px;
-        background: #fff3e0;
-        border-radius: 8px;
+        flex-direction: column; /* Nếu màn hình quá hẹp, xếp chồng 2 nút lên nhau cho dễ bấm */
     }
+    .controls button {
+        width: 100%;
+    }
+}
+
 
     button {
         background: #d32f2f;
@@ -533,3 +557,4 @@ function applyEditLock() {
 
 </body>
 </html>
+
