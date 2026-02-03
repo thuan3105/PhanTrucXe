@@ -207,6 +207,71 @@
         th, td { padding: 8px 6px; }
         .list-area { max-height: 300px; }
     }
+    @media print {
+    /* Ẩn toàn bộ các phần không liên quan */
+    body { background: white; padding: 0; }
+    .setup-section, .controls, button, .note {
+        display: none !important;
+    }
+    
+    /* Căn chỉnh lại vùng in cho đẹp */
+    .container {
+        box-shadow: none;
+        max-width: 100%;
+        width: 100%;
+        padding: 0;
+    }
+
+    h2 {
+        font-size: 20px;
+        margin-bottom: 20px;
+    }
+
+    /* Chia lưới lại để khi in không bị tràn lề */
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr); /* In 2 cột mỗi hàng để chữ to rõ */
+        gap: 10px;
+    }
+
+    .vehicle-card {
+        page-break-inside: avoid; /* Không để card bị cắt đôi khi sang trang */
+        border: 1px solid #000;
+    }
+/* Áp dụng cho cả Web và khi In */
+#reserveList {
+    display: grid !important;
+    /* Ép buộc chia 3 cột bằng nhau */
+    grid-template-columns: repeat(3, 1fr) !important; 
+    gap: 10px 20px !important;
+    list-style: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Định dạng các mục danh sách */
+#reserveList li {
+    padding: 5px 0 !important;
+    border-bottom: 1px solid #ffe0b2 !important;
+    font-size: 14px !important;
+    /* Giúp tên không bị xuống hàng làm lệch cột */
+    white-space: nowrap !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Tinh chỉnh riêng cho chế độ In để không bị mất cột */
+@media print {
+    #reserveList {
+        display: grid !important;
+        grid-template-columns: 33% 33% 33% !important; /* Đảm bảo chia đều mặt giấy */
+    }
+    
+    #reserveSection {
+        page-break-inside: avoid; /* Không để danh sách dự bị bị cắt đôi sang trang khác */
+    }
+}
+}
     /* End inlined CSS */
 </style>
 </head>
@@ -221,7 +286,7 @@
     <textarea id="rawInput" style="width:100%; height:150px;" placeholder="Nhập tên mỗi người một dòng..."></textarea>
     
     <div class="button-group">
-        <button onclick="updatePermanentList()" style="background:#555;">Cập Nhật Danh Sách</button>
+       <button onclick="updatePermanentList()" style="background:#555;">Cập Nhật Danh Sách</button>
         <button id="editToggleBtn" onclick="toggleEditLock()" style="background:#616161;">Khóa chỉnh sửa: OFF</button>
     </div>
     
@@ -242,9 +307,10 @@
         </div>
     </div>
 
-    <div class="controls">
-        <button onclick="generateSchedule()">SẮP XẾP NGẪU NHIÊN</button>
-    </div>
+    <div class="controls button-group">
+    <button onclick="generateSchedule()">SẮP XẾP NGẪU NHIÊN</button>
+    <button onclick="window.print()" style="background:#2e7d32; margin-left:10px;">IN DANH SÁCH</button>
+</div>
 
     <div id="resultGrid" class="grid"></div>
     
@@ -255,82 +321,116 @@
 </div>
 
     <script>
-// Inlined from script.js
-// Khởi tạo `masterList` từ `localStorage` nếu có, hoặc mảng rỗng
-// Đây là nguồn dữ liệu chính cho các thao tác sau (render, sắp xếp...)
-let masterList = JSON.parse(localStorage.getItem('firefighterList')) || [];
-// Khi true => chỉnh sửa bị khóa (không thể tương tác với danh sách hiển thị)
+// Khởi tạo 2 danh sách riêng biệt từ bộ nhớ trình duyệt
+let listOld = JSON.parse(localStorage.getItem('listOld')) || [];
+let listNew = JSON.parse(localStorage.getItem('listNew')) || [];
 let editLocked = false;
 
-function updatePermanentList() {
-    const text = document.getElementById('rawInput').value.trim();
-    if (!text) return;
-    masterList = text.split('\n').map(name => name.trim()).filter(name => name !== "");
-    localStorage.setItem('firefighterList', JSON.stringify(masterList));
-    renderTable();
-}
-
+// 1. Hàm tải dữ liệu từ 2 file
 async function loadFromFile() {
-    // Nếu mở trực tiếp bằng file:// thì không cố gắng fetch file (tránh lỗi CORS/HTTP)
-    if (location.protocol === 'file:') {
-        console.warn('Running from file:// — skipping loadFromFile. Use localStorage or mở bằng server nếu muốn tải soldiers.txt');
-        return;
-    }
+    if (location.protocol === 'file:') return;
     try {
-        const resp = await fetch('soldiers.txt?t=' + Date.now());
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        const text = await resp.text();
-        const list = text.split('\n').map(s => s.trim()).filter(s => s !== '');
-        if (list.length === 0) {
-            alert('File soldiers.txt rỗng.');
-            return;
+        // Tải file khóa cũ (soldiers1.txt)
+        const resp1 = await fetch('soldiers1.txt?t=' + Date.now());
+        if (resp1.ok) {
+            const text1 = await resp1.text();
+            listOld = text1.split('\n').map(s => s.trim()).filter(s => s !== '');
+            localStorage.setItem('listOld', JSON.stringify(listOld));
         }
-        masterList = list;
-        localStorage.setItem('firefighterList', JSON.stringify(masterList));
-        document.getElementById('rawInput').value = masterList.join('\n');
+
+        // Tải file khóa mới (soldiers.txt)
+        const resp2 = await fetch('soldiers.txt?t=' + Date.now());
+        if (resp2.ok) {
+            const text2 = await resp2.text();
+            listNew = text2.split('\n').map(s => s.trim()).filter(s => s !== '');
+            localStorage.setItem('listNew', JSON.stringify(listNew));
+        }
+        
         renderTable();
+        hienThiDanhSachLenOInput(); // Gọi hàm hiển thị gộp
     } catch (err) {
-        alert('Không thể tải file soldiers.txt. Hãy mở trang bằng webserver (ví dụ Live Server) hoặc kiểm tra đường dẫn.\n' + err.message);
+        console.error("Lỗi tải file:", err);
     }
 }
+function hienThiDanhSachLenOInput() {
+    const inputArea = document.getElementById('rawInput');
+    if (inputArea) {
+        let textGop = "--- DANH SÁCH KHÓA CŨ ---\n";
+        textGop += listOld.join('\n');
+        textGop += "\n\n--- DANH SÁCH MỚI ---\n";
+        textGop += listNew.join('\n');
+        inputArea.value = textGop;
+    }
+}
+function updatePermanentList() {
+    const text = document.getElementById('rawInput').value;
+    if (!text.trim()) return;
 
+    const lines = text.split('\n').map(s => s.trim()).filter(s => s !== "");
+    
+    let currentType = 'new'; // Mặc định là lính mới nếu không có tiêu đề
+    let tempOld = [];
+    let tempNew = [];
+
+    lines.forEach(line => {
+        // Kiểm tra nếu dòng là tiêu đề phân loại
+        if (line.includes("DANH SÁCH KHÓA CŨ")) {
+            currentType = 'old';
+        } else if (line.includes("DANH SÁCH MỚI")) {
+            currentType = 'new';
+        } else if (!line.startsWith("---")) { 
+            // Nếu là tên người (không phải dòng kẻ gạch)
+            if (currentType === 'old') tempOld.push(line);
+            else tempNew.push(line);
+        }
+    });
+
+    // Cập nhật vào biến toàn cục
+    listOld = tempOld;
+    listNew = tempNew;
+
+    // Lưu vào localStorage
+    localStorage.setItem('listOld', JSON.stringify(listOld));
+    localStorage.setItem('listNew', JSON.stringify(listNew));
+
+    // Làm mới bảng hiển thị
+    renderTable();
+    alert("Đã cập nhật danh sách thành công!");
+}
+// 2. Hiển thị bảng trạng thái (gộp 2 danh sách để tích vắng/xe sau)
 function renderTable() {
     const body = document.getElementById('checkboxBody');
     body.innerHTML = "";
-    masterList.forEach((name, index) => {
+
+    const createRow = (name, type) => {
         const tr = document.createElement('tr');
-        tr.id = `row${index}`;
+        tr.className = `row-${type}`;
+        tr.dataset.name = name;
+        tr.dataset.type = type; // QUAN TRỌNG: Để hàm sắp xếp biết ai là lính cũ
+        
+        // Hiển thị nhãn (Khóa cũ) hoặc (Mới) dựa trên biến type truyền vào
+        const label = type === 'old' ? 'Khóa cũ' : 'Mới';
+        
         tr.innerHTML = `
-            <td>${name}</td>
-            <td><input type="checkbox" class="absent-cb" onchange="updateRowStyle(${index})"></td>
-            <td><input type="checkbox" class="priority-cb" onchange="updateRowStyle(${index})"></td>
+            <td>${name} <small>(${label})</small></td>
+            <td><input type="checkbox" class="absent-cb" onchange="updateRowStyle(this)"></td>
+            <td><input type="checkbox" class="priority-cb" onchange="updateRowStyle(this)"></td>
         `;
-        body.appendChild(tr);
-    });
+        return tr;
+    };
+
+    // Đổ danh sách lính cũ vào trước, sau đó đến lính mới
+    listOld.forEach(name => body.appendChild(createRow(name, 'old')));
+    listNew.forEach(name => body.appendChild(createRow(name, 'new')));
+    
     applyEditLock();
 }
 
-function applyEditLock() {
-    const textarea = document.getElementById('rawInput');
-    if (textarea) textarea.disabled = editLocked;
-    const rows = document.querySelectorAll('#checkboxBody tr');
-    rows.forEach(r => {
-        const absent = r.querySelector('.absent-cb');
-        const prio = r.querySelector('.priority-cb');
-        if (absent) absent.disabled = editLocked;
-        if (prio) prio.disabled = editLocked;
-        if (editLocked) r.classList.add('locked-row'); else r.classList.remove('locked-row');
-    });
-    const toggleBtn = document.getElementById('editToggleBtn');
-    if (toggleBtn) toggleBtn.textContent = `Khóa chỉnh sửa: ${editLocked ? 'ON' : 'OFF'}`;
-}
-
-function updateRowStyle(index) {
-    const row = document.getElementById(`row${index}`);
+function updateRowStyle(el) {
+    const row = el.closest('tr');
     const isAbsent = row.querySelector('.absent-cb').checked;
     const isPriority = row.querySelector('.priority-cb').checked;
-    
-    row.className = "";
+    row.classList.remove('is-absent', 'is-priority');
     if (isAbsent) row.classList.add('is-absent');
     else if (isPriority) row.classList.add('is-priority');
 }
@@ -343,49 +443,79 @@ function shuffle(array) {
     return array;
 }
 
+// 3. Logic sắp xếp chính
 function generateSchedule() {
-    let normalGroup = [];
-    let priorityGroup = [];
+    let poolOldNormal = [], poolOldPrio = [];
+    let poolNewNormal = [], poolNewPrio = [];
 
-    masterList.forEach((name, index) => {
-        const row = document.getElementById(`row${index}`);
+    // Phân loại CBCS dựa trên trạng thái đã tích
+    const rows = document.querySelectorAll('#checkboxBody tr');
+    rows.forEach(row => {
+        const name = row.dataset.name;
+        const type = row.dataset.type;
         const isAbsent = row.querySelector('.absent-cb').checked;
         const isPriority = row.querySelector('.priority-cb').checked;
 
         if (!isAbsent) {
-            if (isPriority) priorityGroup.push(name);
-            else normalGroup.push(name);
+            if (type === 'old') {
+                if (isPriority) poolOldPrio.push(name); else poolOldNormal.push(name);
+            } else {
+                if (isPriority) poolNewPrio.push(name); else poolNewNormal.push(name);
+            }
         }
     });
 
-    shuffle(normalGroup);
-    shuffle(priorityGroup);
-
-    const finalWaitlist = [...normalGroup, ...priorityGroup];
+    // Trộn ngẫu nhiên (Ưu tiên xe sau sẽ đứng cuối danh sách chờ để được bốc trước nếu cần)
+    const finalOld = [...shuffle(poolOldNormal), ...shuffle(poolOldPrio)];
+    const finalNew = [...shuffle(poolNewNormal), ...shuffle(poolNewPrio)];
 
     const licensePlates = ["000.61", "002.39", "000.95", "005.46", "006.81", "001.38", "001.13", "005.45"];
-
     let gridHtml = "";
+    
+    // Mảng lưu những người chưa được vào xe để đưa vào dự bị
+    let usedOld = 0, usedNew = 0;
+
     for (let i = 0; i < 8; i++) {
         gridHtml += `<div class="vehicle-card"><h3>XE ${i + 1} - ${licensePlates[i]}</h3><ul>`;
-        for (let j = 0; j < 4; j++) {
-            let p = finalWaitlist[i * 4 + j] || "<span style='color:#ccc'>---</span>";
-            gridHtml += `<li>${j + 1}. ${p}</li>`;
+        
+        // Vị trí 1 & 2: Lấy từ danh sách Khóa Cũ
+        for (let j = 1; j <= 2; j++) {
+            let p = finalOld[usedOld++] || "<span style='color:#ccc'>Trống</span>";
+            gridHtml += `<li>${j}. ${p}</li>`;
         }
+        // Vị trí 3 & 4: Lấy từ danh sách Khóa Mới
+        for (let j = 3; j <= 4; j++) {
+            let p = finalNew[usedNew++] || "<span style='color:#ccc'>Trống</span>";
+            gridHtml += `<li>${j}. ${p}</li>`;
+        }
+        
         gridHtml += `</ul></div>`;
     }
     document.getElementById('resultGrid').innerHTML = gridHtml;
-    
-    const reserveList = finalWaitlist.slice(32);
+
+    // Danh sách dự bị: Những người còn dư của cả 2 nhóm
+    const reserveOld = finalOld.slice(usedOld);
+    const reserveNew = finalNew.slice(usedNew);
+    const allReserve = [...reserveOld, ...reserveNew];
+
     let reserveHtml = "";
-    if (reserveList.length > 0) {
-        reserveList.forEach((name, index) => {
+    if (allReserve.length > 0) {
+        allReserve.forEach((name, index) => {
             reserveHtml += `<li>${index + 1}. ${name}</li>`;
         });
     } else {
-        reserveHtml = "<li style='color: #999;'>Không có dự bị</li>";
+        reserveHtml = "<li style='grid-column: 1/-1; text-align:center;'>Không có dự bị</li>";
     }
     document.getElementById('reserveList').innerHTML = reserveHtml;
+}
+
+// Khởi chạy
+// Thay thế đoạn kiểm tra listOld/listNew ở cuối file bằng đoạn này:
+if (listOld.length > 0 || listNew.length > 0) {
+    renderTable();
+    hienThiDanhSachLenOInput(); // Đảm bảo hiện ra kể cả khi dùng localStorage
+} else {
+    loadFromFile();
 }
 
 function toggleEditLock() {
@@ -393,21 +523,13 @@ function toggleEditLock() {
     applyEditLock();
 }
 
-// Nếu đã có dữ liệu lưu trước đó, điền vào textarea và render bảng ngay
-if (masterList.length > 0) {
-    document.getElementById('rawInput').value = masterList.join('\n');
-    renderTable();
-} else {
-    loadFromFile().then(() => {
-        applyEditLock();
-    });
+function applyEditLock() {
+    const toggleBtn = document.getElementById('editToggleBtn');
+    if (toggleBtn) toggleBtn.textContent = `Khóa chỉnh sửa: ${editLocked ? 'ON' : 'OFF'}`;
+    document.querySelectorAll('.absent-cb, .priority-cb').forEach(cb => cb.disabled = editLocked);
 }
 /* End inlined JS */
 </script>
 
 </body>
 </html>
-
-
-
-
